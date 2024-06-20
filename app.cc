@@ -12,10 +12,12 @@ using namespace seastar;
 logger applog(__FILE__);
 
 void set_routes(httpd::routes& r) {
-    httpd::function_handler* h1 = new httpd::function_handler([](httpd::const_req req) {
-        return "hello";
+    httpd::function_handler* read_key = new httpd::function_handler(
+        [](httpd::const_req req) {
+            auto key = req.get_path_param("key");
+            return key;
     });
-    r.add(httpd::operation_type::GET, httpd::url("/"), h1);
+    r.add(httpd::operation_type::GET, httpd::url("/keys").remainder("key"), read_key);
 }
 
 future<int> run_http_server() {
