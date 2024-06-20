@@ -23,16 +23,15 @@ void set_routes(httpd::routes& r) {
             rep.set_status(http::reply::status_type::not_found).done();
             return seastar::sstring();
     }, "json");
-    //httpd::function_handler* write_key = new httpd::function_handler(
-    //    [](httpd::const_req req) {
-    //        auto key = req.get_path_param("key");
-    //        auto value = req.content;
-    //        memtable.put(key, value);
-    //        //return make_ready_future<std::unique_ptr<http::reply>>();
-    //        return memtable.get(key);
-    //});
+    httpd::function_handler* write_key = new httpd::function_handler(
+        [memtable](httpd::const_req req) {
+            auto key = req.get_path_param("key");
+            auto value = req.content;
+            memtable->put(key, value);
+            return value;
+    });
     r.add(httpd::operation_type::GET, httpd::url("/keys").remainder("key"), read_key);
-    //r.add(httpd::operation_type::PUT, httpd::url("/keys").remainder("key"), write_key);
+    r.add(httpd::operation_type::PUT, httpd::url("/keys").remainder("key"), write_key);
 }
 
 future<int> run_http_server() {

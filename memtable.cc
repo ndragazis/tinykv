@@ -9,7 +9,6 @@
 
 MemTable::MemTable(int max_size)
     : _map(), max_size(max_size) {
-        _map["foo"] = "bar";
     }
 
 std::optional<seastar::sstring> MemTable::get(const seastar::sstring& key) const {
@@ -21,20 +20,20 @@ std::optional<seastar::sstring> MemTable::get(const seastar::sstring& key) const
     return {};
 }
 
-    //void put(const std::string& key, std::string& value) {
-    //    auto find_it = _map.find(key);
-    //    if (find_it != _map.end()) {
-    //        _map[key] = value;
-    //        return;
-    //    }
-    //    if (_map.size() < max_size) {
-    //        _map.emplace(key, value);
-    //        return;
-    //    } else {
-    //        //FIXME: Flush the memtable into an SSTable, and create a new empty memtable.
-    //        throw std::runtime_error(std::format("Cannot insert key {} in memtable.", key));
-    //    }
-    //}
+void MemTable::put(const seastar::sstring key, seastar::sstring value) {
+    auto find_it = _map.find(key);
+    if (find_it != _map.end()) {
+        _map[key] = value;
+        return;
+    }
+    if (_map.size() < max_size) {
+        _map.emplace(key, value);
+        return;
+    } else {
+        //FIXME: Flush the memtable into an SSTable, and create a new empty memtable.
+        throw std::runtime_error(std::format("Cannot insert key {} in memtable.", (std::string&)key));
+    }
+}
 
     //void remove(const std::string& key) {
     //    _map.erase(key);
