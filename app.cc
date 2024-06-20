@@ -6,34 +6,33 @@
 #include <seastar/core/thread.hh>
 
 #include "stop_signal.hh"
-#include "memtable.hh"
+#include "kvstore.hh"
 
 using namespace seastar;
 
 logger applog(__FILE__);
 
-void set_routes(httpd::routes& r) {
-    MemTable *memtable = new MemTable(64);
+void set_routes(httpd::routes& r, KVStore& store) {
     httpd::function_handler* read_key = new httpd::function_handler(
-        [memtable](httpd::const_req req, http::reply& rep) {
+        [&store](httpd::const_req req, http::reply& rep) {
             auto key = req.get_path_param("key");
-            auto value = memtable->get(key);
+            auto value = store.get(key);
             if (value.has_value())
                 return *value;
             rep.set_status(http::reply::status_type::not_found).done();
             return seastar::sstring();
     }, "json");
     httpd::function_handler* write_key = new httpd::function_handler(
-        [memtable](httpd::const_req req) {
+        [&store](httpd::const_req req) {
             auto key = req.get_path_param("key");
             auto value = req.content;
-            memtable->put(key, value);
+            store.put(key, value);
             return value;
     });
     httpd::function_handler* delete_key = new httpd::function_handler(
-        [memtable](httpd::const_req req, http::reply& rep) {
+        [&store](httpd::const_req req, http::reply& rep) {
             auto key = req.get_path_param("key");
-            auto value = memtable->remove(key);
+            auto value = store.remove(key);
             if (value.has_value())
                 return *value;
             rep.set_status(http::reply::status_type::not_found).done();
@@ -50,10 +49,14 @@ future<int> run_http_server() {
         net::inet_address addr("127.0.0.1");
         uint16_t port = 9999;
         httpd::http_server_control server;
+        KVStore store(64);
+
         std::cout << "starting HTTP server" << std::endl;
         server.start().get();
         std::cout << "setting routes for HTTP server" << std::endl;
-        server.set_routes(set_routes).get();
+        server.set_routes([&store](httpd::routes& r) {
+            set_routes(r, store);
+        }).get();
         std::cout << "listening on HTTP server" << std::endl;
         server.listen(port).get();
         std::cout << "HTTP server listening on port " << port << " ...\n";
