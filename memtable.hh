@@ -16,7 +16,7 @@ public:
     MemTable(int max_size);
     std::optional<seastar::sstring> get(const seastar::sstring& key) const;
     void put(const seastar::sstring key, seastar::sstring value);
-    void remove(seastar::sstring key);
+    std::optional<seastar::sstring> remove(const seastar::sstring& key);
 };
 
 #endif // MEMTABLE_HH

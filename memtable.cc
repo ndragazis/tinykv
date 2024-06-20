@@ -35,6 +35,14 @@ void MemTable::put(const seastar::sstring key, seastar::sstring value) {
     }
 }
 
-    //void remove(const std::string& key) {
-    //    _map.erase(key);
-    //}
+std::optional<seastar::sstring> MemTable::remove(const seastar::sstring& key) {
+    std::cout << "Searching for key " << key << "\n";
+    auto find_it = _map.find(key);
+    if (find_it != _map.end()) {
+        auto value = find_it->second;
+        _map.erase(key);
+        return value;
+    }
+    std::cout << "Key not found.\n";
+    return {};
+}

@@ -30,8 +30,18 @@ void set_routes(httpd::routes& r) {
             memtable->put(key, value);
             return value;
     });
+    httpd::function_handler* delete_key = new httpd::function_handler(
+        [memtable](httpd::const_req req, http::reply& rep) {
+            auto key = req.get_path_param("key");
+            auto value = memtable->remove(key);
+            if (value.has_value())
+                return *value;
+            rep.set_status(http::reply::status_type::not_found).done();
+            return seastar::sstring();
+    }, "json");
     r.add(httpd::operation_type::GET, httpd::url("/keys").remainder("key"), read_key);
     r.add(httpd::operation_type::PUT, httpd::url("/keys").remainder("key"), write_key);
+    r.add(httpd::operation_type::DELETE, httpd::url("/keys").remainder("key"), delete_key);
 }
 
 future<int> run_http_server() {
