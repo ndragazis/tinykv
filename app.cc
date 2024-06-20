@@ -6,18 +6,33 @@
 #include <seastar/core/thread.hh>
 
 #include "stop_signal.hh"
+#include "memtable.hh"
 
 using namespace seastar;
 
 logger applog(__FILE__);
 
 void set_routes(httpd::routes& r) {
+    MemTable *memtable = new MemTable(64);
     httpd::function_handler* read_key = new httpd::function_handler(
-        [](httpd::const_req req) {
+        [memtable](httpd::const_req req, http::reply& rep) {
             auto key = req.get_path_param("key");
-            return key;
-    });
+            auto value = memtable->get(key);
+            if (value.has_value())
+                return *value;
+            rep.set_status(http::reply::status_type::not_found).done();
+            return seastar::sstring();
+    }, "json");
+    //httpd::function_handler* write_key = new httpd::function_handler(
+    //    [](httpd::const_req req) {
+    //        auto key = req.get_path_param("key");
+    //        auto value = req.content;
+    //        memtable.put(key, value);
+    //        //return make_ready_future<std::unique_ptr<http::reply>>();
+    //        return memtable.get(key);
+    //});
     r.add(httpd::operation_type::GET, httpd::url("/keys").remainder("key"), read_key);
+    //r.add(httpd::operation_type::PUT, httpd::url("/keys").remainder("key"), write_key);
 }
 
 future<int> run_http_server() {
