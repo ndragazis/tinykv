@@ -1,26 +1,25 @@
 #include <map>
 #include <string>
 #include <optional>
-#include <stdexcept>
 #include <format>
 #include <iostream>
 
 #include "memtable.hh"
 
-MemTable::MemTable(int max_size, const seastar::sstring& wal_filename)
-    : _map(), max_size(max_size), wal(wal_filename) {
+MemTable::MemTable(const seastar::sstring& wal_filename)
+    : _map(), curr_size(0), wal(wal_filename) {
     wal.recover(
     [this](const std::string& key, const std::string& value) {
-        _map[key] = value;
+        put(key, value, false);
     },
     [this](const std::string& key) {
-        _map.erase(key);
+        remove(key, false);
     });
 }
 
-//int MemTable::size() {
-//    return static_cast<int>(_map.size());
-//}
+int MemTable::size() const {
+    return curr_size;
+}
 
 std::optional<seastar::sstring> MemTable::get(const seastar::sstring& key) const {
     std::cout << "Searching for key " << key << "\n";
@@ -31,32 +30,38 @@ std::optional<seastar::sstring> MemTable::get(const seastar::sstring& key) const
     return {};
 }
 
-void MemTable::put(const seastar::sstring key, seastar::sstring value) {
-    wal.put(key, value);
-
+void MemTable::put(const seastar::sstring key, seastar::sstring value, bool persist) {
+    if (persist)
+        wal.put(key, value);
     auto find_it = _map.find(key);
     if (find_it != _map.end()) {
         _map[key] = value;
         return;
     }
-    if (_map.size() < max_size) {
-        _map.emplace(key, value);
-        return;
-    } else {
-        //FIXME: Flush the memtable into an SSTable, and create a new empty memtable.
-        throw std::runtime_error(std::format("Cannot insert key {} in memtable.", (std::string&)key));
-    }
+    _map.emplace(key, value);
+    increase_size(key, value);
+    return;
 }
 
-std::optional<seastar::sstring> MemTable::remove(const seastar::sstring& key) {
+std::optional<seastar::sstring> MemTable::remove(const seastar::sstring& key, bool persist) {
     std::cout << "Searching for key " << key << "\n";
     auto find_it = _map.find(key);
     if (find_it != _map.end()) {
-        wal.remove(key);
+        if (persist)
+            wal.remove(key);
         auto value = find_it->second;
         _map.erase(key);
+        decrease_size(key, value);
         return value;
     }
     std::cout << "Key not found.\n";
     return {};
+}
+
+void MemTable::increase_size(const seastar::sstring& key, const seastar::sstring& value) {
+    curr_size += key.size() + value.size();
+}
+
+void MemTable::decrease_size(const seastar::sstring& key, const seastar::sstring& value) {
+    curr_size -= key.size() + value.size();
 }
