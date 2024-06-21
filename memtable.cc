@@ -7,9 +7,20 @@
 
 #include "memtable.hh"
 
-MemTable::MemTable(int max_size)
-    : _map(), max_size(max_size) {
-    }
+MemTable::MemTable(int max_size, const seastar::sstring& wal_filename)
+    : _map(), max_size(max_size), wal(wal_filename) {
+    wal.recover(
+    [this](const std::string& key, const std::string& value) {
+        _map[key] = value;
+    },
+    [this](const std::string& key) {
+        _map.erase(key);
+    });
+}
+
+//int MemTable::size() {
+//    return static_cast<int>(_map.size());
+//}
 
 std::optional<seastar::sstring> MemTable::get(const seastar::sstring& key) const {
     std::cout << "Searching for key " << key << "\n";
@@ -21,6 +32,8 @@ std::optional<seastar::sstring> MemTable::get(const seastar::sstring& key) const
 }
 
 void MemTable::put(const seastar::sstring key, seastar::sstring value) {
+    wal.put(key, value);
+
     auto find_it = _map.find(key);
     if (find_it != _map.end()) {
         _map[key] = value;
@@ -39,6 +52,7 @@ std::optional<seastar::sstring> MemTable::remove(const seastar::sstring& key) {
     std::cout << "Searching for key " << key << "\n";
     auto find_it = _map.find(key);
     if (find_it != _map.end()) {
+        wal.remove(key);
         auto value = find_it->second;
         _map.erase(key);
         return value;

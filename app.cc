@@ -49,7 +49,9 @@ future<int> run_http_server() {
         net::inet_address addr("127.0.0.1");
         uint16_t port = 9999;
         httpd::http_server_control server;
-        KVStore store(64);
+
+        seastar::sstring dir = seastar::sstring(getenv("HOME")) + "/.tinykv";
+        KVStore store(64, dir);
 
         std::cout << "starting HTTP server" << std::endl;
         server.start().get();
