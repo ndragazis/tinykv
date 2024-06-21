@@ -5,8 +5,9 @@
 #include <seastar/core/sstring.hh>
 
 class WriteAheadLog {
-private:
+public:
     seastar::sstring filename;
+private:
     std::ofstream ofs;
     std::ifstream ifs;
 public:

@@ -11,10 +11,11 @@
 #include "write-ahead-log.hh"
 
 class MemTable {
-private:
+public:
     std::map<seastar::sstring, seastar::sstring> _map;
-    int curr_size;
     WriteAheadLog wal;
+private:
+    int curr_size;
 public:
     MemTable(const seastar::sstring& wal_filename);
     std::optional<seastar::sstring> get(const seastar::sstring& key) const;
