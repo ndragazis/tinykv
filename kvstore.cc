@@ -17,13 +17,9 @@ KVStore::KVStore(int memtable_size, const seastar::sstring& dir)
 {
     std::cout << "KVStore - Creating directory " << dir << "\n";
     std::filesystem::create_directories(std::filesystem::path(dir));
-
     recover_active_memtables();
-
-    //FIXME: Find all SSTables.
-
     current_memtable = std::make_unique<MemTable>(wal_filename);
-
+    load_sstables();
 }
 
 std::optional<seastar::sstring> KVStore::get(const seastar::sstring& key) const {
@@ -32,14 +28,20 @@ std::optional<seastar::sstring> KVStore::get(const seastar::sstring& key) const 
     if (value.has_value()) {
         return value;
     }
-    for (auto& memtable : active_memtables) {
+    for (const auto& memtable : active_memtables) {
         std::cout << "Searcing for key " << key << " in active memtable " << memtable->wal.filename << "\n";
         value = memtable->get(key);
         if (value.has_value()) {
             return value;
         }
     }
-    // If not found, check SSTables (not implemented here)
+    for (const auto& sstable : sstables) {
+        std::cout << "Searcing for key " << key << " in sstable " << sstable.filename << "\n";
+        value = sstable.get(key);
+        if (value.has_value()) {
+            return value;
+        }
+    }
     return std::nullopt;
 }
 
@@ -117,13 +119,13 @@ void KVStore::create_new_memtable() {
 //    });
 //}
 seastar::future<> KVStore::flush_memtable(std::shared_ptr<MemTable> old_memtable) {
-    std::string sstable_filename = dir + "/sstable";
+    std::string sstable_filename = dir + "/sstable_" + std::to_string(++sstable_index);
     std::ofstream sstable_file(sstable_filename);
     if (!sstable_file.is_open()) {
         throw std::runtime_error("Failed to open SSTable file for writing");
     }
     for (const auto& kv : old_memtable->_map) {
-        sstable_file << kv.first << " " << kv.second << "\n";
+        sstable_file << kv.first << "," << kv.second << "\n";
     }
 
     sstable_file.close();
@@ -134,6 +136,7 @@ seastar::future<> KVStore::flush_memtable(std::shared_ptr<MemTable> old_memtable
         std::remove(wal_filename.c_str());
     }
     active_memtables.remove(old_memtable);
+    sstables.emplace_back(sstable_filename);
     return seastar::make_ready_future<>();
 }
 
@@ -158,4 +161,23 @@ void KVStore::recover_active_memtables() {
         //flush_memtable(std::move(memtable));
     }
     std::cout << "WAL index: " << wal_index << "\n";
+}
+
+void KVStore::load_sstables() {
+    namespace fs = std::filesystem;
+    const std::string prefix = "sstable_";
+    auto files = find_files(dir, prefix);
+    std::sort(files.begin(), files.end(),
+    [&prefix, this](const std::string& a, const std::string& b) {
+        int numA = extractNumber(fs::path(a).filename().string(), prefix);
+        int numB = extractNumber(fs::path(b).filename().string(), prefix);
+        if (numA > this->sstable_index) this->sstable_index = numA;
+        if (numB > this->sstable_index) this->sstable_index = numB;
+        return numA > numB;
+    });
+    for (const auto& file : files) {
+        std::cout << "Found SSTable " << file << "\n";
+        sstables.emplace_back(file);
+    }
+    std::cout << "SSTable index: " << sstable_index << "\n";
 }
