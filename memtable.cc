@@ -6,6 +6,8 @@
 
 #include "memtable.hh"
 
+const seastar::sstring MemTable::deletion_marker = "__deleted__";
+
 MemTable::MemTable(const seastar::sstring& wal_filename)
     : _map(), curr_size(0), wal(wal_filename) {
     wal.recover(
@@ -22,11 +24,11 @@ int MemTable::size() const {
 }
 
 std::optional<seastar::sstring> MemTable::get(const seastar::sstring& key) const {
-    std::cout << "Searching for key " << key << "\n";
+    std::cout << "MemTable - Searching for key " << key << "\n";
     auto find_it = _map.find(key);
     if (find_it != _map.end())
         return find_it->second;
-    std::cout << "Key not found.\n";
+    std::cout << "MemTable - Key not found.\n";
     return {};
 }
 
@@ -43,19 +45,12 @@ void MemTable::put(const seastar::sstring key, seastar::sstring value, bool pers
     return;
 }
 
-std::optional<seastar::sstring> MemTable::remove(const seastar::sstring& key, bool persist) {
-    std::cout << "Searching for key " << key << "\n";
-    auto find_it = _map.find(key);
-    if (find_it != _map.end()) {
-        if (persist)
-            wal.remove(key);
-        auto value = find_it->second;
-        _map.erase(key);
-        decrease_size(key, value);
-        return value;
-    }
-    std::cout << "Key not found.\n";
-    return {};
+void MemTable::remove(const seastar::sstring& key, bool persist) {
+    if (persist)
+        wal.remove(key);
+    std::cout << "MemTable - Deleting key " << key << "\n";
+    _map[key] = deletion_marker;
+    return;
 }
 
 void MemTable::increase_size(const seastar::sstring& key, const seastar::sstring& value) {

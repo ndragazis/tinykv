@@ -12,7 +12,8 @@
 
 class MemTable {
 public:
-    std::map<seastar::sstring, seastar::sstring> _map;
+    static const seastar::sstring deletion_marker;
+    std::map<seastar::sstring, std::optional<seastar::sstring>> _map;
     WriteAheadLog wal;
 private:
     int curr_size;
@@ -20,7 +21,7 @@ public:
     MemTable(const seastar::sstring& wal_filename);
     std::optional<seastar::sstring> get(const seastar::sstring& key) const;
     void put(const seastar::sstring key, seastar::sstring value, bool persist=true);
-    std::optional<seastar::sstring> remove(const seastar::sstring& key, bool persist=true);
+    void remove(const seastar::sstring& key, bool persist=true);
     int size() const;
 private:
     void increase_size(const seastar::sstring& key, const seastar::sstring& value);

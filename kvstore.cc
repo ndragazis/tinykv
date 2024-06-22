@@ -32,7 +32,10 @@ std::optional<seastar::sstring> KVStore::get(const seastar::sstring& key) const 
     std::cout << "Searcing for key " << key << " in current memtable\n";
     auto value = current_memtable->get(key);
     if (value.has_value()) {
-        return value;
+        if (value.value() == MemTable::deletion_marker)
+            return std::nullopt;
+        else
+            return value;
     }
     for (const auto& memtable : active_memtables) {
         std::cout << "Searcing for key " << key << " in active memtable " << memtable->wal.filename << "\n";
@@ -58,8 +61,8 @@ void KVStore::put(const seastar::sstring& key, const seastar::sstring& value) {
     current_memtable->put(key, value);
 }
 
-std::optional<seastar::sstring> KVStore::remove(const seastar::sstring& key) {
-    return current_memtable->remove(key);
+void KVStore::remove(const seastar::sstring& key) {
+    current_memtable->remove(key);
 }
 
 void KVStore::create_new_memtable() {
@@ -131,7 +134,10 @@ seastar::future<> KVStore::flush_memtable(std::shared_ptr<MemTable> old_memtable
         throw std::runtime_error("Failed to open SSTable file for writing");
     }
     for (const auto& kv : old_memtable->_map) {
-        sstable_file << kv.first << "," << kv.second << "\n";
+        if (kv.second.has_value())
+            sstable_file << kv.first << "," << kv.second.value() << "\n";
+        else
+            sstable_file << kv.first << "," << SSTable::deletion_marker << "\n";
     }
 
     sstable_file.close();

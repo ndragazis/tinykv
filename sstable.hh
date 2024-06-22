@@ -6,6 +6,7 @@
 
 class SSTable {
 public:
+    static const seastar::sstring deletion_marker;
     seastar::sstring filename;
     SSTable(const seastar::sstring& filename);
     std::optional<seastar::sstring> get(const seastar::sstring& key) const;

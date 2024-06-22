@@ -30,14 +30,11 @@ void set_routes(httpd::routes& r, KVStore& store) {
             return value;
     });
     httpd::function_handler* delete_key = new httpd::function_handler(
-        [&store](httpd::const_req req, http::reply& rep) {
+        [&store](httpd::const_req req) {
             auto key = req.get_path_param("key");
-            auto value = store.remove(key);
-            if (value.has_value())
-                return *value;
-            rep.set_status(http::reply::status_type::not_found).done();
+            store.remove(key);
             return seastar::sstring();
-    }, "json");
+    });
     r.add(httpd::operation_type::GET, httpd::url("/keys").remainder("key"), read_key);
     r.add(httpd::operation_type::PUT, httpd::url("/keys").remainder("key"), write_key);
     r.add(httpd::operation_type::DELETE, httpd::url("/keys").remainder("key"), delete_key);

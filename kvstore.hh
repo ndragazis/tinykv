@@ -24,7 +24,7 @@ public:
     ~KVStore();
     std::optional<seastar::sstring> get(const seastar::sstring& key) const;
     void put(const seastar::sstring& key, const seastar::sstring& value);
-    std::optional<seastar::sstring> remove(const seastar::sstring& key);
+    void remove(const seastar::sstring& key);
 private:
     seastar::future<> flush_memtable(std::shared_ptr<MemTable> memtable);
     void create_new_memtable();
