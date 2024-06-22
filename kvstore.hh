@@ -12,8 +12,10 @@ private:
     const seastar::sstring wal_filename;
     std::unique_ptr<MemTable> current_memtable;
     std::list<std::shared_ptr<MemTable>> active_memtables;
+//    std::list<SSTable> sstables;
     const int flush_threshold;
     int wal_index;
+    int sstable_index;
 public:
     KVStore(int memtable_size, const seastar::sstring& dir);
     std::optional<seastar::sstring> get(const seastar::sstring& key) const;
@@ -22,6 +24,7 @@ public:
 private:
     seastar::future<> flush_memtable(std::shared_ptr<MemTable> memtable);
     void create_new_memtable();
+    void recover_active_memtables();
 };
 
 #endif // KVSTORE_HH

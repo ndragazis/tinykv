@@ -6,34 +6,34 @@
 #include <seastar/core/seastar.hh>
 
 #include "kvstore.hh"
-
-//KVStore::KVStore(int memtable_size, const seastar::sstring& dir)
-//    : dir([&dir]() {
-//        std::cout << "KVStore - Creating directory " << dir << "\n";
-//        std::filesystem::create_directories(std::filesystem::path(dir));
-//        return dir;
-//    }())
-//    , wal_filename(dir + "/wal")
-//    , memtable(memtable_size, wal_filename) {
-//}
+#include "file-utils.hh"
 
 KVStore::KVStore(int memtable_size, const seastar::sstring& dir)
     : dir(dir)
     , wal_filename(dir + "/wal")
     , flush_threshold(memtable_size)
     , wal_index(0)
+    , sstable_index(0)
 {
     std::cout << "KVStore - Creating directory " << dir << "\n";
     std::filesystem::create_directories(std::filesystem::path(dir));
+
+    recover_active_memtables();
+
+    //FIXME: Find all SSTables.
+
     current_memtable = std::make_unique<MemTable>(wal_filename);
+
 }
 
 std::optional<seastar::sstring> KVStore::get(const seastar::sstring& key) const {
+    std::cout << "Searcing for key " << key << " in current memtable\n";
     auto value = current_memtable->get(key);
     if (value.has_value()) {
         return value;
     }
     for (auto& memtable : active_memtables) {
+        std::cout << "Searcing for key " << key << " in active memtable " << memtable->wal.filename << "\n";
         value = memtable->get(key);
         if (value.has_value()) {
             return value;
@@ -71,6 +71,7 @@ void KVStore::create_new_memtable() {
     current_memtable = std::move(new_memtable);
 
     // Flush the old memtable to an SSTable asynchronously
+    // FIXME: Only start a flush if this is the first in the list of active memtables
     flush_memtable(std::move(old_memtable)).handle_exception([](std::exception_ptr eptr) {
         try {
             std::rethrow_exception(eptr);
@@ -134,4 +135,27 @@ seastar::future<> KVStore::flush_memtable(std::shared_ptr<MemTable> old_memtable
     }
     active_memtables.remove(old_memtable);
     return seastar::make_ready_future<>();
+}
+
+void KVStore::recover_active_memtables() {
+    namespace fs = std::filesystem;
+    //Find WALs.
+    const std::string wal_prefix = "wal_";
+    auto files = find_files(dir, wal_prefix);
+    std::sort(files.begin(), files.end(),
+    [&wal_prefix, this](const std::string& a, const std::string& b) {
+        int numA = extractNumber(fs::path(a).filename().string(), wal_prefix);
+        int numB = extractNumber(fs::path(b).filename().string(), wal_prefix);
+        if (numA > this->wal_index) this->wal_index = numA;
+        if (numB > this->wal_index) this->wal_index = numB;
+        return numA > numB;
+    });
+    //Recover WALs into memtables and initiate flushing.
+    for (const auto& file : files) {
+        std::cout << "Found WAL " << file << "\n";
+        std::shared_ptr<MemTable> memtable = std::make_shared<MemTable>(file);
+        active_memtables.push_back(std::move(memtable));
+        //flush_memtable(std::move(memtable));
+    }
+    std::cout << "WAL index: " << wal_index << "\n";
 }
