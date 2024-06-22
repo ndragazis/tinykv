@@ -22,6 +22,12 @@ KVStore::KVStore(int memtable_size, const seastar::sstring& dir)
     load_sstables();
 }
 
+KVStore::~KVStore() {
+    //Initiate flushing of the current memtable.
+    flush_memtable(std::move(current_memtable)).get();
+    //FIXME: Wait for all pending flushing operations to finish.
+}
+
 std::optional<seastar::sstring> KVStore::get(const seastar::sstring& key) const {
     std::cout << "Searcing for key " << key << " in current memtable\n";
     auto value = current_memtable->get(key);

@@ -21,6 +21,7 @@ private:
     int sstable_index;
 public:
     KVStore(int memtable_size, const seastar::sstring& dir);
+    ~KVStore();
     std::optional<seastar::sstring> get(const seastar::sstring& key) const;
     void put(const seastar::sstring& key, const seastar::sstring& value);
     std::optional<seastar::sstring> remove(const seastar::sstring& key);
