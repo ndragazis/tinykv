@@ -30,8 +30,8 @@ public:
 private:
     seastar::future<> flush_memtable(std::shared_ptr<MemTable> memtable);
     void create_new_memtable();
-    void recover_active_memtables();
-    void load_sstables();
+    seastar::future<> recover_active_memtables();
+    seastar::future<> load_sstables();
 };
 
 #endif // KVSTORE_HH

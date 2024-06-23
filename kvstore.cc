@@ -25,9 +25,9 @@ KVStore::~KVStore() {
 seastar::future<> KVStore::start() {
     lg.info("Creating directory {}", dir);
     co_await seastar::recursive_touch_directory(dir);
-    recover_active_memtables();
+    co_await recover_active_memtables();
     current_memtable = std::make_unique<MemTable>(wal_filename);
-    load_sstables();
+    co_await load_sstables();
     co_return;
 }
 
@@ -162,11 +162,11 @@ seastar::future<> KVStore::flush_memtable(std::shared_ptr<MemTable> old_memtable
     return seastar::make_ready_future<>();
 }
 
-void KVStore::recover_active_memtables() {
+seastar::future<> KVStore::recover_active_memtables() {
     namespace fs = std::filesystem;
     //Find WALs.
     const std::string wal_prefix = "wal_";
-    auto files = find_files(dir, wal_prefix);
+    auto files = co_await find_files(dir, wal_prefix);
     std::sort(files.begin(), files.end(),
     [&wal_prefix, this](const std::string& a, const std::string& b) {
         int numA = extractNumber(fs::path(a).filename().string(), wal_prefix);
@@ -185,10 +185,10 @@ void KVStore::recover_active_memtables() {
     std::cout << "WAL index: " << wal_index << "\n";
 }
 
-void KVStore::load_sstables() {
+seastar::future<> KVStore::load_sstables() {
     namespace fs = std::filesystem;
     const std::string prefix = "sstable_";
-    auto files = find_files(dir, prefix);
+    auto files = co_await find_files(dir, prefix);
     std::sort(files.begin(), files.end(),
     [&prefix, this](const std::string& a, const std::string& b) {
         int numA = extractNumber(fs::path(a).filename().string(), prefix);
@@ -202,4 +202,5 @@ void KVStore::load_sstables() {
         sstables.emplace_back(file);
     }
     std::cout << "SSTable index: " << sstable_index << "\n";
+    co_return;
 }
