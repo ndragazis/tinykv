@@ -11,7 +11,7 @@
 namespace http = seastar::http;
 namespace httpd = seastar::httpd;
 
-seastar::logger lg(__FILE__);
+static seastar::logger lg(__FILE__);
 
 void set_routes(httpd::routes& r, KVStore& store) {
     httpd::function_handler* read_key = new httpd::function_handler(
@@ -41,15 +41,12 @@ void set_routes(httpd::routes& r, KVStore& store) {
     r.add(httpd::operation_type::DELETE, httpd::url("/keys").remainder("key"), delete_key);
 }
 
-seastar::future<int> run_http_server() {
+seastar::future<int> run_http_server(KVStore& store) {
     seastar_apps_lib::stop_signal stop_signal;
     seastar::sstring ip = "127.0.0.1";
     uint16_t port = 9999;
     auto addr = seastar::make_ipv4_address({static_cast<std::string>(ip), port});
     httpd::http_server_control server;
-
-    seastar::sstring dir = std::string(getenv("HOME")) + "/.tinykv";
-    KVStore store(20, dir);
 
     std::exception_ptr eptr;
     try {
@@ -79,6 +76,20 @@ int main(int argc, char** argv) {
     seastar::app_template app;
 
     return app.run(argc, argv, []() -> seastar::future<int> {
-        co_return co_await run_http_server();
+        seastar::sstring dir = std::string(getenv("HOME")) + "/.tinykv";
+        KVStore store(20, dir);
+
+        co_await store.start();
+        std::exception_ptr eptr;
+        try {
+            co_await run_http_server(store);
+        } catch(...) {
+            eptr = std::current_exception();
+        }
+        co_await store.stop();
+        if (eptr) {
+            co_return seastar::coroutine::exception(eptr);
+        }
+        co_return 0;
     });
 }

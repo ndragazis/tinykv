@@ -4,9 +4,12 @@
 #include <seastar/core/file.hh>
 #include <seastar/core/file-types.hh>
 #include <seastar/core/seastar.hh>
+#include <seastar/util/log.hh>
 
 #include "kvstore.hh"
 #include "file-utils.hh"
+
+static seastar::logger lg(__FILE__);
 
 KVStore::KVStore(int memtable_size, const seastar::sstring& dir)
     : dir(dir)
@@ -14,18 +17,25 @@ KVStore::KVStore(int memtable_size, const seastar::sstring& dir)
     , flush_threshold(memtable_size)
     , wal_index(0)
     , sstable_index(0)
-{
-    std::cout << "KVStore - Creating directory " << dir << "\n";
-    std::filesystem::create_directories(std::filesystem::path(dir));
+{}
+
+KVStore::~KVStore() {
+}
+
+seastar::future<> KVStore::start() {
+    lg.info("Creating directory {}", dir);
+    co_await seastar::recursive_touch_directory(dir);
     recover_active_memtables();
     current_memtable = std::make_unique<MemTable>(wal_filename);
     load_sstables();
+    co_return;
 }
 
-KVStore::~KVStore() {
+seastar::future<> KVStore::stop() noexcept {
     //Initiate flushing of the current memtable.
     flush_memtable(std::move(current_memtable)).get();
     //FIXME: Wait for all pending flushing operations to finish.
+    co_return;
 }
 
 std::optional<seastar::sstring> KVStore::get(const seastar::sstring& key) const {
