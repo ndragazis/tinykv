@@ -8,9 +8,10 @@
 #include "stop_signal.hh"
 #include "kvstore.hh"
 
-using namespace seastar;
+namespace http = seastar::http;
+namespace httpd = seastar::httpd;
 
-logger applog(__FILE__);
+seastar::logger lg(__FILE__);
 
 void set_routes(httpd::routes& r, KVStore& store) {
     httpd::function_handler* read_key = new httpd::function_handler(
@@ -40,35 +41,37 @@ void set_routes(httpd::routes& r, KVStore& store) {
     r.add(httpd::operation_type::DELETE, httpd::url("/keys").remainder("key"), delete_key);
 }
 
-future<int> run_http_server() {
-    return async([] {
-        seastar_apps_lib::stop_signal stop_signal;
-        net::inet_address addr("127.0.0.1");
-        uint16_t port = 9999;
-        httpd::http_server_control server;
+seastar::future<> run_http_server() {
+    seastar_apps_lib::stop_signal stop_signal;
+    seastar::sstring ip = "127.0.0.1";
+    uint16_t port = 9999;
+    auto addr = seastar::make_ipv4_address({static_cast<std::string>(ip), port});
+    httpd::http_server_control server;
 
-        seastar::sstring dir = seastar::sstring(getenv("HOME")) + "/.tinykv";
-        KVStore store(64, dir);
+    seastar::sstring dir = std::string(getenv("HOME")) + "/.tinykv";
+    KVStore store(20, dir);
 
-        std::cout << "starting HTTP server" << std::endl;
-        server.start().get();
-        std::cout << "setting routes for HTTP server" << std::endl;
-        server.set_routes([&store](httpd::routes& r) {
-            set_routes(r, store);
-        }).get();
-        std::cout << "listening on HTTP server" << std::endl;
-        server.listen(port).get();
-        std::cout << "HTTP server listening on port " << port << " ...\n";
-        std::cout << "stopping HTTP server" << std::endl;
-        stop_signal.wait().get();
-        server.stop().get();
-        std::cout << "HTTP server stopped" << std::endl;
-        return 0;
+    lg.info("Starting HTTP server");
+    co_await server.start();
+    lg.info("Setting routes for HTTP server");
+    co_await server.set_routes([&store](httpd::routes& r) {
+        set_routes(r, store);
     });
+    lg.info("Listening on HTTP address {}", addr);
+    co_await server.listen(addr);
+    lg.info("Use SIGINT or SIGTERM to stop the server");
+    co_await stop_signal.wait();
+    lg.info("Stopping HTTP server");
+    co_await server.stop();
+    lg.info("HTTP server stopped");
+    co_return;
 }
 
 int main(int argc, char** argv) {
-    app_template app;
+    seastar::app_template app;
 
-    return app.run(argc, argv, run_http_server);
+    return app.run(argc, argv, []() -> seastar::future<int> {
+        co_await run_http_server();
+        co_return 0;
+    });
 }
