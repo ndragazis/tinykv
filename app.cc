@@ -41,7 +41,7 @@ void set_routes(httpd::routes& r, KVStore& store) {
     r.add(httpd::operation_type::DELETE, httpd::url("/keys").remainder("key"), delete_key);
 }
 
-seastar::future<> run_http_server() {
+seastar::future<int> run_http_server() {
     seastar_apps_lib::stop_signal stop_signal;
     seastar::sstring ip = "127.0.0.1";
     uint16_t port = 9999;
@@ -51,27 +51,34 @@ seastar::future<> run_http_server() {
     seastar::sstring dir = std::string(getenv("HOME")) + "/.tinykv";
     KVStore store(20, dir);
 
-    lg.info("Starting HTTP server");
-    co_await server.start();
-    lg.info("Setting routes for HTTP server");
-    co_await server.set_routes([&store](httpd::routes& r) {
-        set_routes(r, store);
-    });
-    lg.info("Listening on HTTP address {}", addr);
-    co_await server.listen(addr);
-    lg.info("Use SIGINT or SIGTERM to stop the server");
-    co_await stop_signal.wait();
+    std::exception_ptr eptr;
+    try {
+        lg.info("Starting HTTP server");
+        co_await server.start();
+        lg.info("Setting routes for HTTP server");
+        co_await server.set_routes([&store](httpd::routes& r) {
+            set_routes(r, store);
+        });
+        lg.info("Listening on HTTP address {}", addr);
+        co_await server.listen(addr);
+        lg.info("Use SIGINT or SIGTERM to stop the server");
+        co_await stop_signal.wait();
+    } catch(...) {
+        eptr = std::current_exception();
+    }
     lg.info("Stopping HTTP server");
     co_await server.stop();
     lg.info("HTTP server stopped");
-    co_return;
+    if (eptr) {
+        co_return seastar::coroutine::exception(eptr);
+    }
+    co_return 0;
 }
 
 int main(int argc, char** argv) {
     seastar::app_template app;
 
     return app.run(argc, argv, []() -> seastar::future<int> {
-        co_await run_http_server();
-        co_return 0;
+        co_return co_await run_http_server();
     });
 }
