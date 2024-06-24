@@ -57,7 +57,7 @@ KVStore::get(const seastar::sstring& key) const {
     }
     for (const auto& sstable : sstables) {
         std::cout << "Searcing for key " << key << " in sstable " << sstable.filename << "\n";
-        value = sstable.get(key);
+        value = co_await sstable.get(key);
         if (value.has_value()) {
             co_return value;
         }
