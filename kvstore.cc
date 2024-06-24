@@ -38,30 +38,31 @@ seastar::future<> KVStore::stop() noexcept {
     co_return;
 }
 
-std::optional<seastar::sstring> KVStore::get(const seastar::sstring& key) const {
-    std::cout << "Searcing for key " << key << " in current memtable\n";
+seastar::future<std::optional<seastar::sstring>>
+KVStore::get(const seastar::sstring& key) const {
+    lg.info("Searcing for key {}", key);
     auto value = current_memtable->get(key);
     if (value.has_value()) {
         if (value.value() == MemTable::deletion_marker)
-            return std::nullopt;
+            co_return std::nullopt;
         else
-            return value;
+            co_return value;
     }
     for (const auto& memtable : active_memtables) {
         std::cout << "Searcing for key " << key << " in active memtable " << memtable->wal.filename << "\n";
         value = memtable->get(key);
         if (value.has_value()) {
-            return value;
+            co_return value;
         }
     }
     for (const auto& sstable : sstables) {
         std::cout << "Searcing for key " << key << " in sstable " << sstable.filename << "\n";
         value = sstable.get(key);
         if (value.has_value()) {
-            return value;
+            co_return value;
         }
     }
-    return std::nullopt;
+    co_return std::nullopt;
 }
 
 void KVStore::put(const seastar::sstring& key, const seastar::sstring& value) {

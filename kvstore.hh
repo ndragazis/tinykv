@@ -24,7 +24,7 @@ public:
     ~KVStore();
     seastar::future<> start();
     seastar::future<> stop() noexcept;
-    std::optional<seastar::sstring> get(const seastar::sstring& key) const;
+    seastar::future<std::optional<seastar::sstring>> get(const seastar::sstring& key) const;
     void put(const seastar::sstring& key, const seastar::sstring& value);
     void remove(const seastar::sstring& key);
 private:

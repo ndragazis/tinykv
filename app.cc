@@ -15,13 +15,18 @@ static seastar::logger lg(__FILE__);
 
 void set_routes(httpd::routes& r, KVStore& store) {
     httpd::function_handler* read_key = new httpd::function_handler(
-        [&store](httpd::const_req req, http::reply& rep) {
-            auto key = req.get_path_param("key");
-            auto value = store.get(key);
-            if (value.has_value())
-                return *value;
-            rep.set_status(http::reply::status_type::not_found).done();
-            return seastar::sstring();
+        [&store](std::unique_ptr<http::request> req,
+                 std::unique_ptr<http::reply> rep) {
+            auto key = req->get_path_param("key");
+            return store.get(key).then([&](auto value) {
+            if (value.has_value()) {
+                rep->set_status(http::reply::status_type::ok);
+                rep->write_body("json", std::string(value.value()));
+            } else {
+                rep->set_status(http::reply::status_type::not_found).done();
+            }
+            return seastar::make_ready_future<std::unique_ptr<http::reply>>(std::move(rep));
+        });
     }, "json");
     httpd::function_handler* write_key = new httpd::function_handler(
         [&store](httpd::const_req req) {
