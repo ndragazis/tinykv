@@ -4,6 +4,7 @@
 #include <seastar/http/handlers.hh>
 #include <seastar/http/function_handlers.hh>
 #include <seastar/core/thread.hh>
+#include <seastar/json/json_elements.hh>
 
 #include "stop_signal.hh"
 #include "kvstore.hh"
@@ -29,11 +30,12 @@ void set_routes(httpd::routes& r, KVStore& store) {
         });
     }, "json");
     httpd::function_handler* write_key = new httpd::function_handler(
-        [&store](httpd::const_req req) {
-            auto key = req.get_path_param("key");
-            auto value = req.content;
-            store.put(key, value);
-            return value;
+        [&store](std::unique_ptr<http::request> req) {
+            auto key = req->get_path_param("key");
+            auto value = req->content;
+            return store.put(key, value).then([&]() {
+                return seastar::make_ready_future<seastar::json::json_return_type>(value);
+            });
     });
     httpd::function_handler* delete_key = new httpd::function_handler(
         [&store](httpd::const_req req) {

@@ -65,11 +65,12 @@ KVStore::get(const seastar::sstring& key) const {
     co_return std::nullopt;
 }
 
-void KVStore::put(const seastar::sstring& key, const seastar::sstring& value) {
+seastar::future<> KVStore::put(const seastar::sstring& key, const seastar::sstring& value) {
     if (current_memtable->size() > flush_threshold) {
         create_new_memtable();
     }
     current_memtable->put(key, value);
+    co_return;
 }
 
 void KVStore::remove(const seastar::sstring& key) {
