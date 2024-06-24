@@ -26,7 +26,7 @@ public:
     seastar::future<> stop() noexcept;
     seastar::future<std::optional<seastar::sstring>> get(const seastar::sstring& key) const;
     seastar::future<> put(const seastar::sstring& key, const seastar::sstring& value);
-    void remove(const seastar::sstring& key);
+    seastar::future<> remove(const seastar::sstring& key);
 private:
     seastar::future<> flush_memtable(std::shared_ptr<MemTable> memtable);
     void create_new_memtable();

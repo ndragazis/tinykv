@@ -73,8 +73,9 @@ seastar::future<> KVStore::put(const seastar::sstring& key, const seastar::sstri
     co_return;
 }
 
-void KVStore::remove(const seastar::sstring& key) {
+seastar::future<> KVStore::remove(const seastar::sstring& key) {
     current_memtable->remove(key);
+    co_return;
 }
 
 void KVStore::create_new_memtable() {
