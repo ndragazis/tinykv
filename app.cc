@@ -17,40 +17,31 @@ static seastar::logger lg(__FILE__);
 void set_routes(httpd::routes& r, KVStore& store) {
     httpd::function_handler* read_key = new httpd::function_handler(
         [&store](std::unique_ptr<http::request> req,
-                 std::unique_ptr<http::reply> rep) {
+                 std::unique_ptr<http::reply> rep) -> seastar::future<std::unique_ptr<http::reply>> {
             auto key = req->get_path_param("key");
-            return seastar::do_with(key, std::move(rep), [&] (auto& key, auto& rep) {
-                return store.get(key).then([&](auto value) {
-                if (value.has_value()) {
-                    rep->set_status(http::reply::status_type::ok);
-                    rep->write_body("json", std::string(value.value()));
-                } else {
-                    rep->set_status(http::reply::status_type::not_found).done();
-                }
-                return seastar::make_ready_future<std::unique_ptr<http::reply>>(std::move(rep));
-            });
-        });
+            auto value = co_await store.get(key);
+            if (value.has_value()) {
+                rep->set_status(http::reply::status_type::ok);
+                rep->write_body("json", std::string(value.value()));
+            } else {
+                rep->set_status(http::reply::status_type::not_found).done();
+            }
+            co_return std::move(rep);
     }, "json");
     httpd::function_handler* write_key = new httpd::function_handler(
-        [&store](std::unique_ptr<http::request> req) {
+        [&store](std::unique_ptr<http::request> req) -> seastar::future<seastar::json::json_return_type> {
             auto key = req->get_path_param("key");
             auto value = req->content;
-            return seastar::do_with(key, value, [&] (auto& key, auto& value) {
-                return store.put(key, value).then([&]() {
-                    return seastar::make_ready_future<seastar::json::json_return_type>(value);
-                });
-            });
+            co_await store.put(key, value);
+            co_return value;
     });
     httpd::function_handler* delete_key = new httpd::function_handler(
         [&store](std::unique_ptr<http::request> req,
-                 std::unique_ptr<http::reply> rep) {
+                 std::unique_ptr<http::reply> rep) -> seastar::future<std::unique_ptr<http::reply>> {
             auto key = req->get_path_param("key");
-            return seastar::do_with(key, std::move(rep), [&] (auto& key, auto& rep) {
-                return store.remove(key).then([&]() {
-                    rep->set_status(http::reply::status_type::ok);
-                    return seastar::make_ready_future<std::unique_ptr<http::reply>>(std::move(rep));
-                });
-            });
+            co_await store.remove(key);
+            rep->set_status(http::reply::status_type::ok);
+            co_return std::move(rep);
     }, "json");
     r.add(httpd::operation_type::GET, httpd::url("/keys").remainder("key"), read_key);
     r.add(httpd::operation_type::PUT, httpd::url("/keys").remainder("key"), write_key);
