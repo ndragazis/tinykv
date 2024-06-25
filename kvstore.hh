@@ -29,7 +29,7 @@ public:
     seastar::future<> remove(const seastar::sstring& key);
 private:
     seastar::future<> flush_memtable(std::shared_ptr<MemTable> memtable);
-    void create_new_memtable();
+    seastar::future<> create_new_memtable();
     seastar::future<> recover_active_memtables();
     seastar::future<> load_sstables();
 };
