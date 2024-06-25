@@ -1,17 +1,21 @@
 #include <sstream>
 #include <iostream>
 
+#include <seastar/util/log.hh>
+
 #include "write-ahead-log.hh"
+
+static seastar::logger lg(__FILE__);
 
 WriteAheadLog::WriteAheadLog(const seastar::sstring& filename)
     : filename(filename) {
-    std::cout << "WriteAheadLog - opening wal file " << filename << "\n";
+    lg.debug("Opening wal file: {} ", filename);
     ofs.open(filename, std::ios::out | std::ios::app);
     ifs.open(filename, std::ios::in);
 }
 
 WriteAheadLog::~WriteAheadLog() {
-    std::cout << "WriteAheadLog - closing wal file " << filename << "\n";
+    lg.debug("Closing wal file: {} ", filename);
     if (ofs.is_open()) {
         ofs.close();
     }
@@ -21,12 +25,12 @@ WriteAheadLog::~WriteAheadLog() {
 }
 
 void WriteAheadLog::put(const seastar::sstring& key, const seastar::sstring& value) {
-    ofs << "PUT\t" << key << '\t' << value << '\n';
+    ofs << "PUT" << ',' << key << ',' << value << '\n';
     ofs.flush();
 }
 
 void WriteAheadLog::remove(const seastar::sstring& key) {
-    ofs << "REMOVE\t" << key << '\n';
+    ofs << "REMOVE" << ',' << key << '\n';
     ofs.flush();
 }
 
@@ -36,8 +40,8 @@ void WriteAheadLog::recover(std::function<void(const seastar::sstring&, const se
     while (std::getline(ifs, line)) {
         std::istringstream iss(line);
         std::string op, key, value;
-        std::getline(iss, op, '\t');
-        std::getline(iss, key, '\t');
+        std::getline(iss, op, ',');
+        std::getline(iss, key, ',');
         if (op == "PUT") {
             std::getline(iss, value);
             apply_put(key, value);
