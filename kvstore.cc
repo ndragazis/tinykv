@@ -47,14 +47,14 @@ KVStore::get(const seastar::sstring& key) const {
             co_return value;
     }
     for (const auto& memtable : active_memtables) {
-        std::cout << "Searcing for key " << key << " in active memtable " << memtable->wal.filename << "\n";
+        lg.debug("Searcing for key {} in active memtable (wal: {})", key, memtable->wal.filename);
         value = memtable->get(key);
         if (value.has_value()) {
             co_return value;
         }
     }
     for (const auto& sstable : sstables) {
-        std::cout << "Searcing for key " << key << " in sstable " << sstable.filename << "\n";
+        lg.debug("Searcing for key {} in sstable {}", key, sstable.filename);
         value = co_await sstable.get(key);
         if (value.has_value()) {
             co_return value;
@@ -130,6 +130,7 @@ seastar::future<> KVStore::flush_memtable(std::shared_ptr<MemTable> old_memtable
 }
 
 seastar::future<> KVStore::recover_active_memtables() {
+    lg.info("Recovering active memtables from disk");
     namespace fs = std::filesystem;
     //Find WALs.
     const std::string wal_prefix = "wal_";
@@ -144,15 +145,16 @@ seastar::future<> KVStore::recover_active_memtables() {
     });
     //Recover WALs into memtables and initiate flushing.
     for (const auto& file : files) {
-        std::cout << "Found WAL " << file << "\n";
+        lg.debug("Found WAL: {} ", file);
         std::shared_ptr<MemTable> memtable = std::make_shared<MemTable>(file);
         active_memtables.push_back(std::move(memtable));
         //flush_memtable(std::move(memtable));
     }
-    std::cout << "WAL index: " << wal_index << "\n";
+    lg.debug("WAL index: {}", wal_index);
 }
 
 seastar::future<> KVStore::load_sstables() {
+    lg.info("Finding SSTables from disk");
     namespace fs = std::filesystem;
     const std::string prefix = "sstable_";
     auto files = co_await find_files(dir, prefix);
@@ -165,9 +167,9 @@ seastar::future<> KVStore::load_sstables() {
         return numA > numB;
     });
     for (const auto& file : files) {
-        std::cout << "Found SSTable " << file << "\n";
+        lg.debug("Found SSTable: {} ", file);
         sstables.emplace_back(file);
     }
-    std::cout << "SSTable index: " << sstable_index << "\n";
+    lg.debug("SSTable index: {}", sstable_index);
     co_return;
 }
