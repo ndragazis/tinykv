@@ -4,7 +4,11 @@
 #include <format>
 #include <iostream>
 
+#include <seastar/util/log.hh>
+
 #include "memtable.hh"
+
+static seastar::logger lg(__FILE__);
 
 const seastar::sstring MemTable::deletion_marker = "__deleted__";
 
@@ -12,10 +16,10 @@ MemTable::MemTable(const seastar::sstring& wal_filename)
     : _map(), curr_size(0), wal(wal_filename) {
     wal.recover(
     [this](const std::string& key, const std::string& value) {
-        put(key, value, false);
+        _put(key, value);
     },
     [this](const std::string& key) {
-        remove(key, false);
+        _remove(key);
     });
 }
 
@@ -24,17 +28,17 @@ int MemTable::size() const {
 }
 
 std::optional<seastar::sstring> MemTable::get(const seastar::sstring& key) const {
-    std::cout << "MemTable - Searching for key " << key << "\n";
+    lg.debug("Getting key {} from memtable (wal: {})", key, wal.filename);
     auto find_it = _map.find(key);
-    if (find_it != _map.end())
+    if (find_it != _map.end()) {
         return find_it->second;
-    std::cout << "MemTable - Key not found.\n";
-    return {};
+        lg.debug("Found the key!");
+    }
+    lg.debug("Did not find key {} in memtable (wal: {})", key, wal.filename);
+    return std::nullopt;
 }
 
-void MemTable::put(const seastar::sstring key, seastar::sstring value, bool persist) {
-    if (persist)
-        wal.put(key, value);
+void MemTable::_put(const seastar::sstring key, seastar::sstring value) {
     auto find_it = _map.find(key);
     if (find_it != _map.end()) {
         _map[key] = value;
@@ -45,12 +49,23 @@ void MemTable::put(const seastar::sstring key, seastar::sstring value, bool pers
     return;
 }
 
-void MemTable::remove(const seastar::sstring& key, bool persist) {
-    if (persist)
-        wal.remove(key);
-    std::cout << "MemTable - Deleting key " << key << "\n";
+seastar::future<>
+MemTable::put(const seastar::sstring key, seastar::sstring value) {
+    lg.debug("Putting key {} in memtable (wal: {})", key, wal.filename);
+    wal.put(key, value);
+    _put(key, value);
+    co_return;
+}
+
+void MemTable::_remove(const seastar::sstring& key) {
     _map[key] = deletion_marker;
-    return;
+}
+
+seastar::future<> MemTable::remove(const seastar::sstring& key) {
+    lg.debug("Deleting key {} from memtable (wal: {})", key, wal.filename);
+    wal.remove(key);
+    _remove(key);
+    co_return;
 }
 
 void MemTable::increase_size(const seastar::sstring& key, const seastar::sstring& value) {

@@ -7,6 +7,8 @@
 #include <format>
 
 #include <seastar/core/sstring.hh>
+#include <seastar/core/future.hh>
+#include <seastar/core/coroutine.hh>
 
 #include "write-ahead-log.hh"
 
@@ -20,12 +22,14 @@ private:
 public:
     MemTable(const seastar::sstring& wal_filename);
     std::optional<seastar::sstring> get(const seastar::sstring& key) const;
-    void put(const seastar::sstring key, seastar::sstring value, bool persist=true);
-    void remove(const seastar::sstring& key, bool persist=true);
+    seastar::future<> put(const seastar::sstring key, seastar::sstring value);
+    seastar::future<> remove(const seastar::sstring& key);
     int size() const;
 private:
     void increase_size(const seastar::sstring& key, const seastar::sstring& value);
     void decrease_size(const seastar::sstring& key, const seastar::sstring& value);
+    void _put(const seastar::sstring key, seastar::sstring value);
+    void _remove(const seastar::sstring& key);
 };
 
 #endif // MEMTABLE_HH

@@ -68,12 +68,12 @@ seastar::future<> KVStore::put(const seastar::sstring& key, const seastar::sstri
     if (current_memtable->size() > flush_threshold) {
         co_await create_new_memtable();
     }
-    current_memtable->put(key, value);
+    co_await current_memtable->put(key, value);
     co_return;
 }
 
 seastar::future<> KVStore::remove(const seastar::sstring& key) {
-    current_memtable->remove(key);
+    co_await current_memtable->remove(key);
     co_return;
 }
 
