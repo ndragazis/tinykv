@@ -39,10 +39,10 @@ SSTable::get(const seastar::sstring& key) const {
         std::getline(iss, value);
         lg.debug("Current value: {}", value);
         if (curr_key == key && value != deletion_marker) {
-            lg.info("Found the key!");
+            lg.debug("Found the key!");
             co_return value;
         }
     }
-    lg.info("Did not find the key in this SSTable.");
+    lg.debug("Did not find key {} in sstable {}.", key, filename);
     co_return std::nullopt;
 }

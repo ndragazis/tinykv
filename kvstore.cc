@@ -39,6 +39,7 @@ seastar::future<> KVStore::stop() noexcept {
 seastar::future<std::optional<seastar::sstring>>
 KVStore::get(const seastar::sstring& key) const {
     lg.info("Searcing for key {}", key);
+    lg.debug("Searcing for key {} in current memtable (wal: {})", key, current_memtable->wal.filename);
     auto value = current_memtable->get(key);
     if (value.has_value()) {
         if (value.value() == MemTable::deletion_marker)
