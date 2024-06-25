@@ -99,8 +99,15 @@ seastar::future<> KVStore::create_new_memtable() {
 }
 
 seastar::future<> KVStore::flush_memtable(std::shared_ptr<MemTable> old_memtable) {
+    if (old_memtable->size() == 0) {
+        lg.debug("Skip flushing for empty memtable (wal: {}).",
+            old_memtable->wal.filename);
+        co_return co_await delete_memtable(old_memtable);
+    }
+
     std::string sstable_filename = dir + "/sstable_" + std::to_string(++sstable_index);
-    lg.info("Flushing memtable into SSTable: {}", sstable_filename);
+    lg.info("Flushing memtable (wal: {}) into SSTable: {}",
+        old_memtable->wal.filename, sstable_filename);
 
     /* Code based on `seastar/demos/file_demo.cc`. */
 
@@ -119,15 +126,17 @@ seastar::future<> KVStore::flush_memtable(std::shared_ptr<MemTable> old_memtable
                 return os.write(kv.first + "," + SSTable::deletion_marker + "\n");
     }).finally([&os] {return os.close();});
 
-    // Remove the old WAL file
-    std::string wal_filename = old_memtable->wal.filename;
+    sstables.emplace_back(sstable_filename);
+    co_return co_await delete_memtable(old_memtable);
+}
+
+seastar::future<> KVStore::delete_memtable(std::shared_ptr<MemTable> memtable) {
+    std::string wal_filename = memtable->wal.filename;
     if (co_await seastar::file_exists(wal_filename)) {
         co_await seastar::remove_file(wal_filename);
         co_await seastar::sync_directory(dir);
     }
-    active_memtables.remove(old_memtable);
-    sstables.emplace_back(sstable_filename);
-    co_return;
+    active_memtables.remove(memtable);
 }
 
 seastar::future<> KVStore::recover_active_memtables() {
