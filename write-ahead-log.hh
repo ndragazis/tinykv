@@ -2,22 +2,31 @@
 #define WRITEAHEADLOG_H
 #include <fstream>
 
+#include <seastar/core/file.hh>
 #include <seastar/core/sstring.hh>
+#include <seastar/core/future.hh>
 
 class WriteAheadLog {
 public:
     seastar::sstring filename;
 private:
-    std::ofstream ofs;
-    std::ifstream ifs;
+    seastar::file f;
+    uint64_t fpos;
+    seastar::temporary_buffer<char> wbuf;
+    uint64_t wbuf_pos;
+    uint64_t wbuf_align;
+    size_t wbuf_len;
 public:
     WriteAheadLog(const seastar::sstring& filename);
-    void put(const seastar::sstring& key, const seastar::sstring& value);
-    void remove(const seastar::sstring& key);
-    void recover(std::function<void(const seastar::sstring&, const seastar::sstring&)> apply_put,
-                 std::function<void(const seastar::sstring&)> apply_remove);
-    seastar::future<> load();
-    seastar::future<> destroy();
+    seastar::future<> put(const seastar::sstring& key, const seastar::sstring& value);
+    seastar::future<> remove(const seastar::sstring& key);
+    seastar::future<> recover(
+        std::function<void(const seastar::sstring&, const seastar::sstring&)> apply_put,
+        std::function<void(const seastar::sstring&)> apply_remove);
+    seastar::future<> open();
+    seastar::future<> close();
+private:
+    seastar::future<> write(const std::string& entry);
 };
 
 #endif // WRITEAHEADLOG_H

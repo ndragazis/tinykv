@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
     return app.run(argc, argv, [] {
         return seastar::async([] {
             seastar::sstring dir = std::string(getenv("HOME")) + "/.tinykv";
-            KVStore store(20, dir);
+            KVStore store(65536, dir);
             run_http_server(store).get();
         });
     });

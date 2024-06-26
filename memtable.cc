@@ -17,8 +17,8 @@ MemTable::MemTable(const seastar::sstring& wal_filename)
 }
 
 seastar::future<> MemTable::load() {
-    co_await wal.load();
-    wal.recover(
+    co_await wal.open();
+    co_await wal.recover(
     [this](const std::string& key, const std::string& value) {
         _put(key, value);
     },
@@ -28,7 +28,7 @@ seastar::future<> MemTable::load() {
 }
 
 seastar::future<> MemTable::destroy() {
-    co_await wal.destroy();
+    co_await wal.close();
 }
 
 int MemTable::size() const {
@@ -60,7 +60,7 @@ void MemTable::_put(const seastar::sstring key, seastar::sstring value) {
 seastar::future<>
 MemTable::put(const seastar::sstring key, seastar::sstring value) {
     lg.debug("Putting key {} in memtable (wal: {})", key, wal.filename);
-    wal.put(key, value);
+    co_await wal.put(key, value);
     _put(key, value);
     co_return;
 }
@@ -71,7 +71,7 @@ void MemTable::_remove(const seastar::sstring& key) {
 
 seastar::future<> MemTable::remove(const seastar::sstring& key) {
     lg.debug("Deleting key {} from memtable (wal: {})", key, wal.filename);
-    wal.remove(key);
+    co_await wal.remove(key);
     _remove(key);
     co_return;
 }
