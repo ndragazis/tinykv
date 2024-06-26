@@ -9,12 +9,16 @@ static seastar::logger lg(__FILE__);
 
 WriteAheadLog::WriteAheadLog(const seastar::sstring& filename)
     : filename(filename) {
+}
+
+seastar::future<> WriteAheadLog::load() {
     lg.debug("Opening wal file: {} ", filename);
     ofs.open(filename, std::ios::out | std::ios::app);
     ifs.open(filename, std::ios::in);
+    return seastar::make_ready_future<>();
 }
 
-WriteAheadLog::~WriteAheadLog() {
+seastar::future<> WriteAheadLog::destroy() {
     lg.debug("Closing wal file: {} ", filename);
     if (ofs.is_open()) {
         ofs.close();
@@ -22,6 +26,7 @@ WriteAheadLog::~WriteAheadLog() {
     if (ifs.is_open()) {
         ifs.close();
     }
+    return seastar::make_ready_future<>();
 }
 
 void WriteAheadLog::put(const seastar::sstring& key, const seastar::sstring& value) {

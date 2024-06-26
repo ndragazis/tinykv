@@ -14,6 +14,10 @@ const seastar::sstring MemTable::deletion_marker = "__deleted__";
 
 MemTable::MemTable(const seastar::sstring& wal_filename)
     : _map(), curr_size(0), wal(wal_filename) {
+}
+
+seastar::future<> MemTable::load() {
+    co_await wal.load();
     wal.recover(
     [this](const std::string& key, const std::string& value) {
         _put(key, value);
@@ -21,6 +25,10 @@ MemTable::MemTable(const seastar::sstring& wal_filename)
     [this](const std::string& key) {
         _remove(key);
     });
+}
+
+seastar::future<> MemTable::destroy() {
+    co_await wal.destroy();
 }
 
 int MemTable::size() const {

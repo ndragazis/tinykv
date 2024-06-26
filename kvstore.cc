@@ -32,6 +32,7 @@ seastar::future<> KVStore::start() {
     co_await seastar::recursive_touch_directory(dir);
     co_await recover_active_memtables();
     current_memtable = std::make_unique<MemTable>(wal_filename);
+    co_await current_memtable->load();
     co_await load_sstables();
     co_return;
 }
@@ -93,6 +94,7 @@ seastar::future<> KVStore::create_new_memtable() {
     current_memtable->wal.filename = new_wal_filename;
 
     auto new_memtable = std::make_unique<MemTable>(dir + "/wal");
+    co_await new_memtable->load();
 
     // Swap the new memtable with the current one
     std::shared_ptr<MemTable> old_memtable = std::move(current_memtable);
@@ -142,6 +144,7 @@ seastar::future<> KVStore::delete_memtable(std::shared_ptr<MemTable> memtable) {
         co_await seastar::sync_directory(dir);
     }
     active_memtables.remove(memtable);
+    co_await memtable->destroy();
 }
 
 seastar::future<> KVStore::recover_active_memtables() {
@@ -162,6 +165,7 @@ seastar::future<> KVStore::recover_active_memtables() {
     for (const auto& file : files) {
         lg.debug("Found WAL: {} ", file);
         std::shared_ptr<MemTable> memtable = std::make_shared<MemTable>(file);
+        co_await memtable->load();
         active_memtables.push_back(std::move(memtable));
         //flush_memtable(std::move(memtable));
     }

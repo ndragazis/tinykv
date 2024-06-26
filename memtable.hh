@@ -24,6 +24,8 @@ public:
     std::optional<seastar::sstring> get(const seastar::sstring& key) const;
     seastar::future<> put(const seastar::sstring key, seastar::sstring value);
     seastar::future<> remove(const seastar::sstring& key);
+    seastar::future<> load();
+    seastar::future<> destroy();
     int size() const;
 private:
     void increase_size(const seastar::sstring& key, const seastar::sstring& value);

@@ -12,11 +12,12 @@ private:
     std::ifstream ifs;
 public:
     WriteAheadLog(const seastar::sstring& filename);
-    ~WriteAheadLog();
     void put(const seastar::sstring& key, const seastar::sstring& value);
     void remove(const seastar::sstring& key);
     void recover(std::function<void(const seastar::sstring&, const seastar::sstring&)> apply_put,
                  std::function<void(const seastar::sstring&)> apply_remove);
+    seastar::future<> load();
+    seastar::future<> destroy();
 };
 
 #endif // WRITEAHEADLOG_H
