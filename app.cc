@@ -82,21 +82,11 @@ seastar::future<int> run_http_server(KVStore& store) {
 int main(int argc, char** argv) {
     seastar::app_template app;
 
-    return app.run(argc, argv, []() -> seastar::future<int> {
-        seastar::sstring dir = std::string(getenv("HOME")) + "/.tinykv";
-        KVStore store(20, dir);
-
-        co_await store.start();
-        std::exception_ptr eptr;
-        try {
-            co_await run_http_server(store);
-        } catch(...) {
-            eptr = std::current_exception();
-        }
-        co_await store.stop();
-        if (eptr) {
-            co_return seastar::coroutine::exception(eptr);
-        }
-        co_return 0;
+    return app.run(argc, argv, [] {
+        return seastar::async([] {
+            seastar::sstring dir = std::string(getenv("HOME")) + "/.tinykv";
+            KVStore store(20, dir);
+            run_http_server(store).get();
+        });
     });
 }

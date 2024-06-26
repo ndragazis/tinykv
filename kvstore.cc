@@ -18,12 +18,16 @@ KVStore::KVStore(int memtable_size, const seastar::sstring& dir)
     , flush_threshold(memtable_size)
     , wal_index(0)
     , sstable_index(0)
-{}
+{
+    start().get();
+}
 
 KVStore::~KVStore() {
+    stop().get();
 }
 
 seastar::future<> KVStore::start() {
+    lg.debug("Starting KVStore");
     lg.info("Creating directory {}", dir);
     co_await seastar::recursive_touch_directory(dir);
     co_await recover_active_memtables();
@@ -33,6 +37,7 @@ seastar::future<> KVStore::start() {
 }
 
 seastar::future<> KVStore::stop() noexcept {
+    lg.debug("Stopping KVStore");
     co_return co_await flush_memtable(std::move(current_memtable));
 }
 

@@ -22,12 +22,12 @@ private:
 public:
     KVStore(int memtable_size, const seastar::sstring& dir);
     ~KVStore();
-    seastar::future<> start();
-    seastar::future<> stop() noexcept;
     seastar::future<std::optional<seastar::sstring>> get(const seastar::sstring& key) const;
     seastar::future<> put(const seastar::sstring& key, const seastar::sstring& value);
     seastar::future<> remove(const seastar::sstring& key);
 private:
+    seastar::future<> start();
+    seastar::future<> stop() noexcept;
     seastar::future<> flush_memtable(std::shared_ptr<MemTable> memtable);
     seastar::future<> delete_memtable(std::shared_ptr<MemTable> memtable);
     seastar::future<> create_new_memtable();
