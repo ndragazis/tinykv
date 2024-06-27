@@ -38,8 +38,12 @@ SSTable::get(const seastar::sstring& key) const {
         lg.debug("Current key characters (ASCII): '{:X}'", fmt::join(curr_key, " "));
         std::getline(iss, value);
         lg.debug("Current value: {}", value);
-        if (curr_key == key && value != deletion_marker) {
-            lg.debug("Found the key!");
+        if (curr_key == key) {
+            if (value != deletion_marker) {
+                lg.debug("Found the key!");
+            } else {
+                lg.debug("Key has been deleted.");
+            }
             co_return value;
         }
     }

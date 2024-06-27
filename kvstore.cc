@@ -48,23 +48,20 @@ KVStore::get(const seastar::sstring& key) const {
     lg.debug("Searcing for key {} in current memtable (wal: {})", key, current_memtable->wal.filename);
     auto value = current_memtable->get(key);
     if (value.has_value()) {
-        if (value.value() == MemTable::deletion_marker)
-            co_return std::nullopt;
-        else
-            co_return value;
+        co_return (value.value() == MemTable::deletion_marker) ? std::nullopt : value;
     }
     for (const auto& memtable : active_memtables) {
         lg.debug("Searcing for key {} in active memtable (wal: {})", key, memtable->wal.filename);
         value = memtable->get(key);
         if (value.has_value()) {
-            co_return value;
+            co_return (value.value() == MemTable::deletion_marker) ? std::nullopt : value;
         }
     }
     for (const auto& sstable : sstables) {
         lg.debug("Searcing for key {} in sstable {}", key, sstable.filename);
         value = co_await sstable.get(key);
         if (value.has_value()) {
-            co_return value;
+            co_return (value.value() == SSTable::deletion_marker) ? std::nullopt : value;
         }
     }
     co_return std::nullopt;
