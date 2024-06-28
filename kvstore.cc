@@ -5,6 +5,7 @@
 #include <seastar/core/file-types.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/fstream.hh>
+#include <seastar/core/shard_id.hh>
 #include <seastar/util/log.hh>
 
 #include "kvstore.hh"
@@ -13,18 +14,12 @@
 static seastar::logger lg(__FILE__);
 
 KVStore::KVStore(int memtable_size, const seastar::sstring& dir)
-    : dir(dir)
-    , wal_filename(dir + "/wal")
+    : dir(dir + "/shard_" + std::to_string(seastar::this_shard_id()))
+    , wal_filename(dir + "/shard_" + std::to_string(seastar::this_shard_id()) + "/wal")
     , flush_threshold(memtable_size)
     , wal_index(0)
     , sstable_index(0)
-{
-    start().get();
-}
-
-KVStore::~KVStore() {
-    stop().get();
-}
+{}
 
 seastar::future<> KVStore::start() {
     lg.debug("Starting KVStore");

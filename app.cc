@@ -14,12 +14,13 @@ namespace httpd = seastar::httpd;
 
 static seastar::logger lg(__FILE__);
 
-void set_routes(httpd::routes& r, KVStore& store) {
+void set_routes(httpd::routes& r, seastar::distributed<KVStore>& store) {
     httpd::function_handler* read_key = new httpd::function_handler(
         [&store](std::unique_ptr<http::request> req,
                  std::unique_ptr<http::reply> rep) -> seastar::future<std::unique_ptr<http::reply>> {
             auto key = req->get_path_param("key");
-            auto value = co_await store.get(key);
+            auto value = co_await store.invoke_on(0,
+                [&key](KVStore& store) { return store.get(key); });
             if (value.has_value()) {
                 rep->set_status(http::reply::status_type::ok);
                 rep->write_body("json", std::string(value.value()));
@@ -32,14 +33,16 @@ void set_routes(httpd::routes& r, KVStore& store) {
         [&store](std::unique_ptr<http::request> req) -> seastar::future<seastar::json::json_return_type> {
             auto key = req->get_path_param("key");
             auto value = req->content;
-            co_await store.put(key, value);
+            co_await store.invoke_on(0,
+                [&key, &value](KVStore& store) { return store.put(key, value); });
             co_return value;
     });
     httpd::function_handler* delete_key = new httpd::function_handler(
         [&store](std::unique_ptr<http::request> req,
                  std::unique_ptr<http::reply> rep) -> seastar::future<std::unique_ptr<http::reply>> {
             auto key = req->get_path_param("key");
-            co_await store.remove(key);
+            co_await store.invoke_on(0,
+                [&key](KVStore& store) { return store.remove(key); });
             rep->set_status(http::reply::status_type::ok);
             co_return std::move(rep);
     }, "json");
@@ -48,7 +51,8 @@ void set_routes(httpd::routes& r, KVStore& store) {
     r.add(httpd::operation_type::DELETE, httpd::url("/keys").remainder("key"), delete_key);
 }
 
-seastar::future<int> run_http_server(KVStore& store) {
+seastar::future<int>
+run_http_server(seastar::distributed<KVStore>& store) {
     seastar_apps_lib::stop_signal stop_signal;
     seastar::sstring ip = "127.0.0.1";
     uint16_t port = 9999;
@@ -81,12 +85,17 @@ seastar::future<int> run_http_server(KVStore& store) {
 
 int main(int argc, char** argv) {
     seastar::app_template app;
+    seastar::distributed<KVStore> store;
 
-    return app.run(argc, argv, [] {
-        return seastar::async([] {
+    return app.run(argc, argv, [&] {
+        return seastar::async([&] {
             seastar::sstring dir = std::string(getenv("HOME")) + "/.tinykv";
-            KVStore store(65536, dir);
+            store.start(65536, dir).get();
+            store.invoke_on_all([](KVStore& store){return store.start();}).get();
             run_http_server(store).get();
+            //Call KVStore::stop() on all shards and delete them.
+            store.stop().get();
+            lg.info("Stopped all KVStore instances.");
         });
     });
 }
