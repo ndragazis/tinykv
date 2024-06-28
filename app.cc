@@ -14,6 +14,17 @@ namespace httpd = seastar::httpd;
 
 static seastar::logger lg(__FILE__);
 
+const seastar::sstring bad_request_msg =
+R"({
+    "error": "Invalid key",
+    "message": "The provided key exceeds the maximum allowed length of 255 characters."
+}
+)";
+
+static inline bool is_valid(const seastar::sstring& key) {
+    return key.size() <= 255;
+}
+
 static inline unsigned shard_from_key(const seastar::sstring& key, unsigned num_shards) {
     return std::hash<seastar::sstring>()(key) % num_shards;
 }
@@ -23,6 +34,11 @@ void set_routes(httpd::routes& r, seastar::distributed<KVStore>& store) {
         [&store](std::unique_ptr<http::request> req,
                  std::unique_ptr<http::reply> rep) -> seastar::future<std::unique_ptr<http::reply>> {
             auto key = req->get_path_param("key");
+            if (!is_valid(key)) {
+                rep->set_status(http::reply::status_type::bad_request);
+                rep->write_body("json", bad_request_msg);
+                co_return std::move(rep);
+            }
             auto shard = shard_from_key(key, seastar::smp::count);
             auto value = co_await store.invoke_on(shard,
                 [&key](KVStore& store) { return store.get(key); });
@@ -35,18 +51,31 @@ void set_routes(httpd::routes& r, seastar::distributed<KVStore>& store) {
             co_return std::move(rep);
     }, "json");
     httpd::function_handler* write_key = new httpd::function_handler(
-        [&store](std::unique_ptr<http::request> req) -> seastar::future<seastar::json::json_return_type> {
+        [&store](std::unique_ptr<http::request> req,
+                 std::unique_ptr<http::reply> rep) -> seastar::future<std::unique_ptr<http::reply>> {
             auto key = req->get_path_param("key");
+            if (!is_valid(key)) {
+                rep->set_status(http::reply::status_type::bad_request);
+                rep->write_body("json", bad_request_msg);
+                co_return std::move(rep);
+            }
             auto value = req->content;
             auto shard = shard_from_key(key, seastar::smp::count);
             co_await store.invoke_on(shard,
                 [&key, &value](KVStore& store) { return store.put(key, value); });
-            co_return value;
-    });
+            rep->set_status(http::reply::status_type::ok);
+            rep->write_body("json", value);
+            co_return std::move(rep);
+    }, "json");
     httpd::function_handler* delete_key = new httpd::function_handler(
         [&store](std::unique_ptr<http::request> req,
                  std::unique_ptr<http::reply> rep) -> seastar::future<std::unique_ptr<http::reply>> {
             auto key = req->get_path_param("key");
+            if (!is_valid(key)) {
+                rep->set_status(http::reply::status_type::bad_request);
+                rep->write_body("json", bad_request_msg);
+                co_return std::move(rep);
+            }
             auto shard = shard_from_key(key, seastar::smp::count);
             co_await store.invoke_on(shard,
                 [&key](KVStore& store) { return store.remove(key); });
