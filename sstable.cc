@@ -20,10 +20,8 @@ SSTable::SSTable(const seastar::sstring& filename)
 /*
  * FIXME: Do not load the whole file in memory. Use pagination.
  */
-seastar::future<std::optional<seastar::sstring>>
-SSTable::get(const seastar::sstring& key) const {
-    lg.debug("Key in search: {}", key);
-    lg.debug("Key characters (ASCII): '{:X}'", fmt::join(key, " "));
+seastar::coroutine::experimental::generator<std::pair<seastar::sstring, seastar::sstring>>
+SSTable::get() const {
     auto buf = co_await seastar::util::read_entire_file_contiguous(std::filesystem::path(filename));
     lg.debug("Read {} bytes.", buf.size());
     if (!buf.empty())
@@ -32,12 +30,23 @@ SSTable::get(const seastar::sstring& key) const {
     std::string line;
     while (std::getline(iss, line)) {
         std::istringstream iss(line);
-        std::string curr_key, value;
-        std::getline(iss, curr_key, ',');
-        lg.debug("Current key: {}", curr_key);
-        lg.debug("Current key characters (ASCII): '{:X}'", fmt::join(curr_key, " "));
+        std::string key, value;
+        std::getline(iss, key, ',');
+        lg.debug("Current key: {}", key);
+        lg.debug("Current key characters (ASCII): '{:X}'", fmt::join(key, " "));
         std::getline(iss, value);
         lg.debug("Current value: {}", value);
+        co_yield std::pair(key, value);
+    }
+}
+
+seastar::future<std::optional<seastar::sstring>>
+SSTable::get(const seastar::sstring& key) const {
+    lg.debug("Key in search: {}", key);
+    lg.debug("Key characters (ASCII): '{:X}'", fmt::join(key, " "));
+    auto kvs = get();
+    while (auto kv = co_await kvs()) {
+        auto [curr_key, value] = kv.value();
         if (curr_key == key) {
             if (value != deletion_marker) {
                 lg.debug("Found the key!");
