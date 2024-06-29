@@ -3,6 +3,7 @@
 #include <list>
 
 #include <seastar/core/future.hh>
+#include <seastar/coroutine/generator.hh>
 
 #include "memtable.hh"
 #include "sstable.hh"
@@ -22,7 +23,8 @@ private:
 public:
     KVStore(int memtable_size, const seastar::sstring& dir);
     seastar::future<std::optional<seastar::sstring>> get(const seastar::sstring& key) const;
-    seastar::future<std::map<seastar::sstring, seastar::sstring>> get() const;
+    seastar::coroutine::experimental::generator<std::pair<seastar::sstring, seastar::sstring>>
+    get() const;
     seastar::future<> put(const seastar::sstring& key, const seastar::sstring& value);
     seastar::future<> remove(const seastar::sstring& key);
     seastar::future<> start();

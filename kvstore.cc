@@ -62,7 +62,7 @@ KVStore::get(const seastar::sstring& key) const {
     co_return std::nullopt;
 }
 
-seastar::future<std::map<seastar::sstring, seastar::sstring>>
+seastar::coroutine::experimental::generator<std::pair<seastar::sstring, seastar::sstring>>
 KVStore::get() const {
     std::map<seastar::sstring, seastar::sstring> data;
     lg.debug("Getting all keys from current memtable (wal: {})", current_memtable->wal.filename);
@@ -87,7 +87,11 @@ KVStore::get() const {
             data.emplace(key, value);
         }
     }
-    co_return data;
+    for (const auto& [key, value] : data) {
+        if (value != MemTable::deletion_marker &&
+                value != SSTable::deletion_marker)
+            co_yield std::pair{key, value};
+    }
 }
 
 seastar::future<> KVStore::put(const seastar::sstring& key, const seastar::sstring& value) {

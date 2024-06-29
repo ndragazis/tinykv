@@ -30,6 +30,24 @@ static inline unsigned shard_from_key(const seastar::sstring& key, unsigned num_
 }
 
 void set_routes(httpd::routes& r, seastar::distributed<KVStore>& store) {
+    httpd::function_handler* list_keys = new httpd::function_handler(
+        [&store](std::unique_ptr<http::request> req,
+                 std::unique_ptr<http::reply> rep) -> seastar::future<std::unique_ptr<http::reply>> {
+            auto value = co_await store.invoke_on(0,
+                [](KVStore& store) -> seastar::future<seastar::json::json_return_type> {
+                    std::map<seastar::sstring, seastar::sstring> map;
+                    auto kvs = store.get();
+                    while (const auto& kv = co_await kvs()) {
+                        auto [key, value] = kv.value();
+                        map[key] = value;
+                    }
+                    seastar::json::json_return_type json(map);
+                    co_return json;
+                });
+            rep->set_status(http::reply::status_type::ok);
+            rep->write_body("json", value._res);
+            co_return std::move(rep);
+    }, "json");
     httpd::function_handler* read_key = new httpd::function_handler(
         [&store](std::unique_ptr<http::request> req,
                  std::unique_ptr<http::reply> rep) -> seastar::future<std::unique_ptr<http::reply>> {
@@ -82,6 +100,7 @@ void set_routes(httpd::routes& r, seastar::distributed<KVStore>& store) {
             rep->set_status(http::reply::status_type::ok);
             co_return std::move(rep);
     }, "json");
+    r.add(httpd::operation_type::GET, httpd::url("/keys"), list_keys);
     r.add(httpd::operation_type::GET, httpd::url("/keys").remainder("key"), read_key);
     r.add(httpd::operation_type::PUT, httpd::url("/keys").remainder("key"), write_key);
     r.add(httpd::operation_type::DELETE, httpd::url("/keys").remainder("key"), delete_key);
