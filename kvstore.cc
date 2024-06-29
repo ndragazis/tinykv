@@ -62,6 +62,34 @@ KVStore::get(const seastar::sstring& key) const {
     co_return std::nullopt;
 }
 
+seastar::future<std::map<seastar::sstring, seastar::sstring>>
+KVStore::get() const {
+    std::map<seastar::sstring, seastar::sstring> data;
+    lg.debug("Getting all keys from current memtable (wal: {})", current_memtable->wal.filename);
+    for (const auto& [key, value] : *current_memtable) {
+        data.emplace(key, value.value());
+    }
+    for (const auto& memtable : active_memtables) {
+        lg.debug("Getting all keys from active memtale (wal: {})", memtable->wal.filename);
+        for (const auto& [key, value] : *memtable) {
+            if (data.find(key) != data.end())
+                continue;
+            data.emplace(key, value.value());
+        }
+    }
+    for (const auto& sstable : sstables) {
+        lg.debug("Getting all keys from sstable {}", sstable.filename);
+        auto kvs = sstable.get();
+        while (const auto& kv = co_await kvs()) {
+            auto [key, value] = kv.value();
+            if (data.find(key) != data.end())
+                continue;
+            data.emplace(key, value);
+        }
+    }
+    co_return data;
+}
+
 seastar::future<> KVStore::put(const seastar::sstring& key, const seastar::sstring& value) {
     if (current_memtable->size() > flush_threshold) {
         co_await create_new_memtable();

@@ -22,6 +22,7 @@ private:
 public:
     KVStore(int memtable_size, const seastar::sstring& dir);
     seastar::future<std::optional<seastar::sstring>> get(const seastar::sstring& key) const;
+    seastar::future<std::map<seastar::sstring, seastar::sstring>> get() const;
     seastar::future<> put(const seastar::sstring& key, const seastar::sstring& value);
     seastar::future<> remove(const seastar::sstring& key);
     seastar::future<> start();
