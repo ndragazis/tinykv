@@ -117,7 +117,7 @@ seastar::future<> KVStore::flush_memtable(std::shared_ptr<MemTable> old_memtable
             return seastar::make_file_output_stream(std::move(f));
     });
 
-    co_await seastar::do_for_each(old_memtable->_map,
+    co_await seastar::do_for_each(old_memtable->begin(), old_memtable->end(),
         [&] (std::pair<const seastar::sstring, std::optional<seastar::sstring>> & kv) -> seastar::future<> {
             if (kv.second.has_value())
                 return os.write(kv.first + "," + kv.second.value() + "\n");

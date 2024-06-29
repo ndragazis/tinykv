@@ -83,3 +83,11 @@ void MemTable::increase_size(const seastar::sstring& key, const seastar::sstring
 void MemTable::decrease_size(const seastar::sstring& key, const seastar::sstring& value) {
     curr_size -= key.size() + value.size();
 }
+
+auto MemTable::begin() -> decltype(_map.begin()) {
+    return _map.begin();
+}
+
+auto MemTable::end() -> decltype(_map.end()) {
+    return _map.end();
+}
