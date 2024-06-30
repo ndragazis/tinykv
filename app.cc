@@ -1,9 +1,13 @@
+#include <vector>
+#include <map>
+
 #include <seastar/core/app-template.hh>
 #include <seastar/util/log.hh>
 #include <seastar/http/httpd.hh>
 #include <seastar/http/handlers.hh>
 #include <seastar/http/function_handlers.hh>
 #include <seastar/core/thread.hh>
+#include <seastar/core/when_all.hh>
 #include <seastar/json/json_elements.hh>
 
 #include "stop_signal.hh"
@@ -33,19 +37,30 @@ void set_routes(httpd::routes& r, seastar::distributed<KVStore>& store) {
     httpd::function_handler* list_keys = new httpd::function_handler(
         [&store](std::unique_ptr<http::request> req,
                  std::unique_ptr<http::reply> rep) -> seastar::future<std::unique_ptr<http::reply>> {
-            auto value = co_await store.invoke_on(0,
-                [](KVStore& store) -> seastar::future<seastar::json::json_return_type> {
+            using kvmap = std::map<seastar::sstring, seastar::sstring>;
+            std::vector<seastar::future<kvmap>> futures;
+            for (unsigned int i = 0; i < seastar::smp::count; i++) {
+                auto fut = store.invoke_on(i,
+                [](KVStore& store) -> seastar::future<kvmap> {
                     std::map<seastar::sstring, seastar::sstring> map;
                     auto kvs = store.get();
                     while (const auto& kv = co_await kvs()) {
                         auto [key, value] = kv.value();
                         map[key] = value;
                     }
-                    seastar::json::json_return_type json(map);
-                    co_return json;
+                    co_return map;
                 });
+                futures.emplace_back(std::move(fut));
+            }
+            std::vector<kvmap> results =
+                co_await seastar::when_all_succeed(futures.begin(), futures.end());
+            std::map<seastar::sstring, seastar::sstring> aggr_map;
+            for (auto& res : results) {
+                aggr_map.merge(res);
+            }
+            seastar::json::json_return_type json(aggr_map);
             rep->set_status(http::reply::status_type::ok);
-            rep->write_body("json", value._res);
+            rep->write_body("json", json._res);
             co_return std::move(rep);
     }, "json");
     httpd::function_handler* read_key = new httpd::function_handler(
