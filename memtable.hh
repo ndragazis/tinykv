@@ -33,7 +33,6 @@ private:
     void increase_size(const seastar::sstring& key, const seastar::sstring& value);
     void decrease_size(const seastar::sstring& key, const seastar::sstring& value);
     void _put(const seastar::sstring key, seastar::sstring value);
-    void _remove(const seastar::sstring& key);
 };
 
 #endif // MEMTABLE_HH

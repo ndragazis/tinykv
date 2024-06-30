@@ -23,7 +23,7 @@ seastar::future<> MemTable::load() {
         _put(key, value);
     },
     [this](const std::string& key) {
-        _remove(key);
+        _put(key, deletion_marker);
     });
 }
 
@@ -65,14 +65,10 @@ MemTable::put(const seastar::sstring key, seastar::sstring value) {
     co_return;
 }
 
-void MemTable::_remove(const seastar::sstring& key) {
-    _map[key] = deletion_marker;
-}
-
 seastar::future<> MemTable::remove(const seastar::sstring& key) {
     lg.debug("Deleting key {} from memtable (wal: {})", key, wal.filename);
     co_await wal.remove(key);
-    _remove(key);
+    _put(key, deletion_marker);
     co_return;
 }
 
