@@ -7,6 +7,7 @@
 
 #include "memtable.hh"
 #include "sstable.hh"
+#include "cache.hh"
 
 class KVStore {
 private:
@@ -20,9 +21,10 @@ private:
     const int flush_threshold;
     int wal_index;
     int sstable_index;
+    Cache cache;
 public:
-    KVStore(int memtable_size, const seastar::sstring& dir);
-    seastar::future<std::optional<seastar::sstring>> get(const seastar::sstring& key) const;
+    KVStore(int memtable_size, int cache_capacity, const seastar::sstring& dir);
+    seastar::future<std::optional<seastar::sstring>> get(const seastar::sstring& key);
     seastar::coroutine::experimental::generator<std::pair<seastar::sstring, seastar::sstring>>
     get() const;
     seastar::future<> put(const seastar::sstring& key, const seastar::sstring& value);

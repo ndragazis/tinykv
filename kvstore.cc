@@ -13,12 +13,13 @@
 
 static seastar::logger lg(__FILE__);
 
-KVStore::KVStore(int memtable_size, const seastar::sstring& dir)
+KVStore::KVStore(int memtable_size, int cache_capacity, const seastar::sstring& dir)
     : dir(dir + "/shard_" + std::to_string(seastar::this_shard_id()))
     , wal_filename(dir + "/shard_" + std::to_string(seastar::this_shard_id()) + "/wal")
     , flush_threshold(memtable_size)
     , wal_index(0)
     , sstable_index(0)
+    , cache(cache_capacity)
 {}
 
 seastar::future<> KVStore::start() {
@@ -38,17 +39,25 @@ seastar::future<> KVStore::stop() noexcept {
 }
 
 seastar::future<std::optional<seastar::sstring>>
-KVStore::get(const seastar::sstring& key) const {
+KVStore::get(const seastar::sstring& key) {
     lg.info("Searcing for key {}", key);
-    lg.debug("Searcing for key {} in current memtable (wal: {})", key, current_memtable->wal.filename);
-    auto value = current_memtable->get(key);
+    lg.debug("Searcing for key {} in cache", key);
+    auto value = cache.get(key);
     if (value.has_value()) {
+        co_return (value.value() == MemTable::deletion_marker ||
+                   value.value() == SSTable::deletion_marker) ? std::nullopt : value;
+    }
+    lg.debug("Searcing for key {} in current memtable (wal: {})", key, current_memtable->wal.filename);
+    value = current_memtable->get(key);
+    if (value.has_value()) {
+        cache.put(key, value.value());
         co_return (value.value() == MemTable::deletion_marker) ? std::nullopt : value;
     }
     for (const auto& memtable : active_memtables) {
         lg.debug("Searcing for key {} in active memtable (wal: {})", key, memtable->wal.filename);
         value = memtable->get(key);
         if (value.has_value()) {
+            cache.put(key, value.value());
             co_return (value.value() == MemTable::deletion_marker) ? std::nullopt : value;
         }
     }
@@ -56,6 +65,7 @@ KVStore::get(const seastar::sstring& key) const {
         lg.debug("Searcing for key {} in sstable {}", key, sstable.filename);
         value = co_await sstable.get(key);
         if (value.has_value()) {
+            cache.put(key, value.value());
             co_return (value.value() == SSTable::deletion_marker) ? std::nullopt : value;
         }
     }
@@ -98,11 +108,13 @@ seastar::future<> KVStore::put(const seastar::sstring& key, const seastar::sstri
     if (current_memtable->size() > flush_threshold) {
         co_await create_new_memtable();
     }
+    cache.put(key, value);
     co_await current_memtable->put(key, value);
     co_return;
 }
 
 seastar::future<> KVStore::remove(const seastar::sstring& key) {
+    cache.put(key, MemTable::deletion_marker);
     co_await current_memtable->remove(key);
     co_return;
 }

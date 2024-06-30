@@ -160,7 +160,7 @@ int main(int argc, char** argv) {
     return app.run(argc, argv, [&] {
         return seastar::async([&] {
             seastar::sstring dir = std::string(getenv("HOME")) + "/.tinykv";
-            store.start(65536, dir).get();
+            store.start(65536, 128, dir).get();
             store.invoke_on_all([](KVStore& store){return store.start();}).get();
             run_http_server(store).get();
             //Call KVStore::stop() on all shards and delete them.
