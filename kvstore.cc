@@ -181,10 +181,10 @@ seastar::future<> KVStore::recover_active_memtables() {
     [&wal_prefix, this](const std::string& a, const std::string& b) {
         int numA = extractNumber(fs::path(a).filename().string(), wal_prefix);
         int numB = extractNumber(fs::path(b).filename().string(), wal_prefix);
-        if (numA > this->wal_index) this->wal_index = numA;
-        if (numB > this->wal_index) this->wal_index = numB;
         return numA > numB;
     });
+    if (!files.empty())
+        wal_index = extractNumber(fs::path(files[0]).filename().string(), wal_prefix);
     //Recover WALs into memtables and initiate flushing.
     for (const auto& file : files) {
         lg.debug("Found WAL: {} ", file);
@@ -205,10 +205,10 @@ seastar::future<> KVStore::load_sstables() {
     [&prefix, this](const std::string& a, const std::string& b) {
         int numA = extractNumber(fs::path(a).filename().string(), prefix);
         int numB = extractNumber(fs::path(b).filename().string(), prefix);
-        if (numA > this->sstable_index) this->sstable_index = numA;
-        if (numB > this->sstable_index) this->sstable_index = numB;
         return numA > numB;
     });
+    if (!files.empty())
+        sstable_index = extractNumber(fs::path(files[0]).filename().string(), prefix);
     for (const auto& file : files) {
         lg.debug("Found SSTable: {} ", file);
         sstables.emplace_back(file);
