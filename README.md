@@ -56,6 +56,9 @@ curl -v -XGET http://127.0.0.1:9999/keys/harry
 
 # delete key "harry"
 curl -v -XDELETE http://127.0.0.1:9999/keys/harry
+
+# get sorted list of all keys
+curl -v -XGET http://127.0.0.1:9999/keys
 ```
 
 To see the available seastar options:
